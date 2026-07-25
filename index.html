@@ -2,61 +2,100 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI自動検知 スプリットタイマー</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>AIカメラ・スプリットタイマー Pro</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
   
   <style>
-    body { font-family: sans-serif; text-align: center; background: #121212; color: #fff; margin: 0; padding: 15px; }
-    .video-container { position: relative; display: inline-block; width: 100%; max-width: 400px; }
-    video, canvas { width: 100%; border-radius: 8px; background: #000; }
-    canvas { position: absolute; top: 0; left: 0; }
-    #timer { font-size: 3rem; font-weight: bold; font-family: monospace; color: #00ffcc; margin: 10px 0; }
-    button { padding: 10px 16px; font-size: 0.9rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; margin: 4px; }
-    .btn-start { background: #28a745; color: #fff; }
-    .btn-reset { background: #dc3545; color: #fff; }
-    .btn-mode { background: #17a2b8; color: #fff; }
-    .btn-active { border: 2px solid #00ffcc; font-weight: bold; }
-    input { padding: 8px; font-size: 0.9rem; border-radius: 4px; border: 1px solid #ccc; width: 45%; max-width: 160px; }
-    ul { list-style: none; padding: 0; max-width: 400px; margin: 15px auto; text-align: left; }
-    li { background: #222; padding: 10px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; }
-    .status { font-size: 0.85rem; color: #aaa; margin-bottom: 10px; }
-    .mode-box { background: #222; padding: 10px; border-radius: 8px; margin: 10px auto; max-width: 380px; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #000; color: #fff; overflow-x: hidden; }
+    
+    /* 設定画面スタイル */
+    #setup-view { padding: 20px 15px; text-align: center; }
+    h1 { font-size: 1.3rem; margin-bottom: 15px; }
+    .card { background: #1c1c1e; padding: 15px; border-radius: 12px; margin-bottom: 15px; text-align: left; }
+    .card h3 { font-size: 0.9rem; color: #8e8e93; margin-bottom: 10px; }
+    input { width: 100%; padding: 12px; font-size: 1rem; background: #2c2c2e; border: 1px solid #3a3a3c; color: #fff; border-radius: 8px; margin-bottom: 10px; }
+    
+    /* ボタン共通 */
+    button { padding: 12px 18px; font-size: 0.95rem; font-weight: 600; border: none; border-radius: 10px; cursor: pointer; transition: 0.2s; }
+    .btn-primary { background: #0a84ff; color: #fff; width: 100%; }
+    .btn-success { background: #30d158; color: #fff; }
+    .btn-danger { background: #ff453a; color: #fff; }
+    .btn-secondary { background: #3a3a3c; color: #fff; }
+    .btn-active { border: 2px solid #30d158; background: #1c1c1e; }
+    
+    /* フル画面カメラ撮影モード View */
+    #camera-view { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #000; z-index: 9999; flex-direction: column; }
+    .camera-header { position: absolute; top: 0; left: 0; width: 100%; padding: 15px; background: linear-gradient(180deg, rgba(0,0,0,0.8), transparent); z-index: 10; display: flex; justify-content: space-between; align-items: center; }
+    .camera-container { position: relative; width: 100%; height: 100%; flex: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+    
+    video, canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; }
+    
+    /* カメラオーバーレイUI */
+    #timer-overlay { position: absolute; top: 70px; width: 100%; text-align: center; font-size: 3.2rem; font-family: monospace; font-weight: bold; color: #30d158; text-shadow: 0 2px 10px rgba(0,0,0,0.8); z-index: 5; pointer-events: none; }
+    
+    .camera-controls { position: absolute; bottom: 20px; left: 0; width: 100%; padding: 10px 20px; display: flex; justify-content: space-around; align-items: center; z-index: 10; background: linear-gradient(0deg, rgba(0,0,0,0.8), transparent); }
+    .shutter-btn { width: 65px; height: 65px; border-radius: 50%; border: 4px solid #fff; background: #ff453a; }
+    .shutter-btn.recording { animation: pulse 1s infinite; background: #ff0000; }
+    
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+
+    /* 通過ログ */
+    ul { list-style: none; padding: 0; }
+    li { background: #2c2c2e; padding: 12px; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; font-family: monospace; }
   </style>
 </head>
 <body>
 
-  <h1>🏃 AI通過検知ストップウォッチ</h1>
+  <div id="setup-view">
+    <h1>🏃 AIカメラ・タイマー Pro</h1>
 
-  <div>
-    <span class="status">ID: <strong id="my-id" style="color:#00ffcc">接続中...</strong></span> | 
-    <input type="text" id="target-id" placeholder="親機ID">
-    <button onclick="connectToParent()" style="background:#6c757d; color:#fff;">接続</button>
+    <div class="card">
+      <h3>① 端末通信連携</h3>
+      <p style="font-size:0.85rem; color:#aaa; margin-bottom:8px;">自端末ID: <strong id="my-id" style="color:#30d158">接続中...</strong></p>
+      <input type="text" id="target-id" placeholder="接続先(親機)のIDを入力">
+      <button class="btn-primary" onclick="connectToParent()">相手の端末と接続</button>
+    </div>
+
+    <div class="card">
+      <h3>② AI検知の役割</h3>
+      <div style="display:flex; gap:10px;">
+        <button id="role-start" class="btn-secondary" style="flex:1" onclick="setRole('START')">① スタート用</button>
+        <button id="role-split" class="btn-secondary btn-active" style="flex:1" onclick="setRole('SPLIT')">② ゴール用</button>
+      </div>
+    </div>
+
+    <button class="btn-success" style="width:100%; padding:16px; font-size:1.1rem; margin-bottom:15px;" onclick="openCameraView()">📷 撮影モードを開始</button>
+
+    <div class="card">
+      <h3>⏱️ 記録ログ</h3>
+      <ul id="records"></ul>
+    </div>
   </div>
 
-  <div class="mode-box">
-    <span style="font-size:0.85rem; color:#aaa; display:block; margin-bottom:5px;">AI検知の役割設定:</span>
-    <button id="role-start" class="btn-mode" onclick="setRole('START')">① スタート用 (通過で開始)</button>
-    <button id="role-split" class="btn-mode btn-active" onclick="setRole('SPLIT')">② ゴール用 (通過で記録)</button>
+  <div id="camera-view">
+    <div class="camera-header">
+      <button class="btn-secondary" onclick="closeCameraView()">✕ 戻る</button>
+      <button class="btn-secondary" onclick="switchCamera()">🔄 カメラ切替</button>
+      <button class="btn-secondary" id="auto-btn" onclick="toggleAutoMode()">AI検知: ON</button>
+    </div>
+
+    <div id="timer-overlay">00:00.000</div>
+
+    <div class="camera-container">
+      <video id="input_video" playsinline style="display:none;"></video>
+      <canvas id="output_canvas"></canvas>
+    </div>
+
+    <div class="camera-controls">
+      <button class="btn-success" onclick="broadcastSignal('START')">手動スタート</button>
+      <button class="shutter-btn" id="record-btn" onclick="toggleRecording()"></button>
+      <button class="btn-danger" onclick="broadcastSignal('RESET')">リセット</button>
+    </div>
   </div>
-
-  <div class="video-container">
-    <video id="input_video" playsinline style="display:none;"></video>
-    <canvas id="output_canvas" width="400" height="300"></canvas>
-  </div>
-
-  <div id="timer">00:00.000</div>
-
-  <div>
-    <button class="btn-start" onclick="broadcastSignal('START')">手動スタート</button>
-    <button class="btn-reset" onclick="broadcastSignal('RESET')">リセット</button>
-    <button class="btn-mode" id="auto-btn" onclick="toggleAutoMode()">AI検知: ON</button>
-  </div>
-
-  <h3>⏱️ 通過ログ</h3>
-  <ul id="records"></ul>
 
   <script>
     let peer = new Peer();
@@ -64,14 +103,20 @@
     let startTime = 0;
     let timerInterval = null;
     let autoDetect = true;
-    let hasPassed = false; // 重複検知防止
-    let currentRole = 'SPLIT'; // 'START' または 'SPLIT'
+    let hasPassed = false;
+    let currentRole = 'SPLIT';
+    let facingMode = 'environment'; // 'environment'(外カメ) または 'user'(インカメ)
+    
+    // 録画関係変数
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let isRecording = false;
 
     const videoElement = document.getElementById('input_video');
     const canvasElement = document.getElementById('output_canvas');
     const canvasCtx = canvasElement.getContext('2d');
 
-    // --- 1. PeerJS（通信） ---
+    // --- PeerJS（通信機能） ---
     peer.on('open', id => document.getElementById('my-id').innerText = id);
     peer.on('connection', conn => { connections.push(conn); setupDataHandler(conn); });
 
@@ -81,6 +126,7 @@
       const conn = peer.connect(targetId);
       connections.push(conn);
       setupDataHandler(conn);
+      alert("接続しました！");
     }
 
     function setupDataHandler(conn) {
@@ -102,7 +148,6 @@
       connections.forEach(conn => conn.send(payload));
     }
 
-    // モード設定（スタート用かゴール用か）
     function setRole(role) {
       currentRole = role;
       document.getElementById('role-start').classList.toggle('btn-active', role === 'START');
@@ -110,33 +155,57 @@
       hasPassed = false;
     }
 
-    // --- 2. MediaPipe Pose（人体検知AI） ---
-    const pose = new Pose({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-    });
+    // --- 画面切り替え ＆ カメラ設定 ---
+    let cameraInstance = null;
 
-    pose.setOptions({
-      modelComplexity: 1,
-      smoothLandmarks: true,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    });
+    function openCameraView() {
+      document.getElementById('camera-view').style.display = 'flex';
+      initCamera();
+    }
 
+    function closeCameraView() {
+      document.getElementById('camera-view').style.display = 'none';
+    }
+
+    function switchCamera() {
+      facingMode = (facingMode === 'environment') ? 'user' : 'environment';
+      initCamera();
+    }
+
+    function initCamera() {
+      if (cameraInstance) cameraInstance.stop();
+
+      canvasElement.width = window.innerWidth;
+      canvasElement.height = window.innerHeight;
+
+      cameraInstance = new Camera(videoElement, {
+        onFrame: async () => { await pose.send({ image: videoElement }); },
+        width: 1280,
+        height: 720,
+        facingMode: facingMode
+      });
+      cameraInstance.start();
+    }
+
+    // --- AI判定ロジック (MediaPipe Pose) ---
+    const pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+    pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5 });
     pose.onResults(onResults);
 
     function onResults(results) {
       canvasCtx.save();
       canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
       
+      // アスペクト比を維持して全画面描画
       canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-      // 中央の判定ライン（赤線）
+      // 中央判定線（赤線）
       const lineX = canvasElement.width / 2;
       canvasCtx.beginPath();
       canvasCtx.moveTo(lineX, 0);
       canvasCtx.lineTo(lineX, canvasElement.height);
-      canvasCtx.lineWidth = 3;
-      canvasCtx.strokeStyle = "red";
+      canvasCtx.lineWidth = 4;
+      canvasCtx.strokeStyle = "rgba(255, 69, 58, 0.8)";
       canvasCtx.stroke();
 
       if (results.poseLandmarks) {
@@ -144,29 +213,19 @@
         const noseX = nose.x * canvasElement.width;
         const noseY = nose.y * canvasElement.height;
 
-        // 鼻の位置描画
         canvasCtx.beginPath();
-        canvasCtx.arc(noseX, noseY, 8, 0, 2 * Math.PI);
-        canvasCtx.fillStyle = "#00ffcc";
+        canvasCtx.arc(noseX, noseY, 10, 0, 2 * Math.PI);
+        canvasCtx.fillStyle = "#30d158";
         canvasCtx.fill();
 
-        // 判定ロジック（右から左へ通過した瞬間）
+        // 右から左への通過判定
         if (autoDetect && !hasPassed) {
           if (noseX < lineX) {
             hasPassed = true;
-            
             if (currentRole === 'START') {
-              // スタート用設定の場合：タイマー開始信号を発火！
               broadcastSignal('START');
-              canvasCtx.fillStyle = "#28a745";
-              canvasCtx.font = "30px sans-serif";
-              canvasCtx.fillText("START!", lineX - 50, 50);
             } else if (currentRole === 'SPLIT' && startTime > 0) {
-              // ゴール用設定の場合：通過タイム計測を発火！
               broadcastSignal('SPLIT');
-              canvasCtx.fillStyle = "yellow";
-              canvasCtx.font = "30px sans-serif";
-              canvasCtx.fillText("PASS!", lineX - 40, 50);
             }
           }
         }
@@ -174,19 +233,46 @@
       canvasCtx.restore();
     }
 
-    const camera = new Camera(videoElement, {
-      onFrame: async () => { await pose.send({ image: videoElement }); },
-      width: 400,
-      height: 300
-    });
-    camera.start();
+    // --- 動画録画機能 ---
+    function toggleRecording() {
+      const btn = document.getElementById('record-btn');
+      if (!isRecording) {
+        // 録画開始 (Canvasの映像をキャプチャ)
+        const stream = canvasElement.captureStream(30);
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        recordedChunks = [];
 
-    // --- 3. タイマー処理 ---
+        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+        mediaRecorder.onstop = saveVideo;
+
+        mediaRecorder.start();
+        isRecording = true;
+        btn.classList.add('recording');
+      } else {
+        // 録画停止
+        mediaRecorder.stop();
+        isRecording = false;
+        btn.classList.remove('recording');
+      }
+    }
+
+    function saveVideo() {
+      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `timer_video_${Date.now()}.webm`;
+      a.click();
+      URL.revokeObjectURL(url);
+      alert("録画動画を端末に保存しました！");
+    }
+
+    // --- タイマーUI処理 ---
     function startTimerUI() {
       clearInterval(timerInterval);
       document.getElementById('records').innerHTML = '';
       timerInterval = setInterval(() => {
-        document.getElementById('timer').innerText = formatTime(Date.now() - startTime);
+        document.getElementById('timer-overlay').innerText = formatTime(Date.now() - startTime);
       }, 10);
     }
 
@@ -194,7 +280,7 @@
       clearInterval(timerInterval);
       startTime = 0;
       hasPassed = false;
-      document.getElementById('timer').innerText = "00:00.000";
+      document.getElementById('timer-overlay').innerText = "00:00.000";
       document.getElementById('records').innerHTML = '';
     }
 
