@@ -2,50 +2,52 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>AIカメラ・スプリットタイマー Pro</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
   
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #000; color: #fff; overflow-x: hidden; }
+    * { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
+    html, body { width: 100%; height: 100%; background: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; }
     
-    /* 設定画面スタイル */
-    #setup-view { padding: 20px 15px; text-align: center; }
-    h1 { font-size: 1.3rem; margin-bottom: 15px; }
-    .card { background: #1c1c1e; padding: 15px; border-radius: 12px; margin-bottom: 15px; text-align: left; }
-    .card h3 { font-size: 0.9rem; color: #8e8e93; margin-bottom: 10px; }
-    input { width: 100%; padding: 12px; font-size: 1rem; background: #2c2c2e; border: 1px solid #3a3a3c; color: #fff; border-radius: 8px; margin-bottom: 10px; }
+    /* 1. 設定画面 */
+    #setup-view { width: 100%; height: 100%; padding: 15px; overflow-y: auto; text-align: center; background: #121212; }
+    h1 { font-size: 1.2rem; margin-bottom: 12px; }
+    .card { background: #1c1c1e; padding: 12px; border-radius: 12px; margin-bottom: 12px; text-align: left; }
+    .card h3 { font-size: 0.85rem; color: #8e8e93; margin-bottom: 8px; }
+    input { width: 100%; padding: 10px; font-size: 0.95rem; background: #2c2c2e; border: 1px solid #3a3a3c; color: #fff; border-radius: 8px; margin-bottom: 8px; }
     
-    /* ボタン共通 */
-    button { padding: 12px 18px; font-size: 0.95rem; font-weight: 600; border: none; border-radius: 10px; cursor: pointer; transition: 0.2s; }
+    button { padding: 10px 14px; font-size: 0.9rem; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; }
     .btn-primary { background: #0a84ff; color: #fff; width: 100%; }
     .btn-success { background: #30d158; color: #fff; }
-    .btn-danger { background: #ff453a; color: #fff; }
     .btn-secondary { background: #3a3a3c; color: #fff; }
-    .btn-active { border: 2px solid #30d158; background: #1c1c1e; }
+    .btn-active { border: 2px solid #30d158; background: #2c2c2e; }
     
-    /* フル画面カメラ撮影モード View */
-    #camera-view { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #000; z-index: 9999; flex-direction: column; }
-    .camera-header { position: absolute; top: 0; left: 0; width: 100%; padding: 15px; background: linear-gradient(180deg, rgba(0,0,0,0.8), transparent); z-index: 10; display: flex; justify-content: space-between; align-items: center; }
-    .camera-container { position: relative; width: 100%; height: 100%; flex: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+    /* 2. 大画面撮影モード View */
+    #camera-view { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #000; z-index: 9999; flex-direction: column; justify-content: space-between; }
     
-    video, canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; }
+    .camera-header { position: absolute; top: 0; left: 0; width: 100%; padding: 10px 15px; background: linear-gradient(180deg, rgba(0,0,0,0.7), transparent); z-index: 10; display: flex; justify-content: space-between; align-items: center; }
+    .icon-btn { background: rgba(0,0,0,0.5); color: #fff; font-size: 1.2rem; padding: 8px 12px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); }
     
-    /* カメラオーバーレイUI */
-    #timer-overlay { position: absolute; top: 70px; width: 100%; text-align: center; font-size: 3.2rem; font-family: monospace; font-weight: bold; color: #30d158; text-shadow: 0 2px 10px rgba(0,0,0,0.8); z-index: 5; pointer-events: none; }
+    .camera-container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+    video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
     
-    .camera-controls { position: absolute; bottom: 20px; left: 0; width: 100%; padding: 10px 20px; display: flex; justify-content: space-around; align-items: center; z-index: 10; background: linear-gradient(0deg, rgba(0,0,0,0.8), transparent); }
-    .shutter-btn { width: 65px; height: 65px; border-radius: 50%; border: 4px solid #fff; background: #ff453a; }
-    .shutter-btn.recording { animation: pulse 1s infinite; background: #ff0000; }
+    #timer-overlay { position: absolute; top: 60px; width: 100%; text-align: center; font-size: 2.8rem; font-family: monospace; font-weight: bold; color: #30d158; text-shadow: 0 2px 8px rgba(0,0,0,0.9); z-index: 5; pointer-events: none; }
     
-    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+    /* コントロール操作部 */
+    .camera-controls { position: absolute; bottom: 30px; left: 0; width: 100%; display: flex; justify-content: space-around; align-items: center; z-index: 10; padding: 0 20px; }
+    
+    /* 赤い丸のスタート/ストップシャッターボタン */
+    .shutter-btn { width: 72px; height: 72px; border-radius: 50%; border: 4px solid #fff; background: #ff453a; box-shadow: 0 0 10px rgba(0,0,0,0.5); transition: transform 0.1s; }
+    .shutter-btn:active { transform: scale(0.92); }
+    .shutter-btn.active-rec { background: #ff0000; animation: pulse 1s infinite; border-radius: 18px; } /* 録画停止状態 */
 
-    /* 通過ログ */
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
+
     ul { list-style: none; padding: 0; }
-    li { background: #2c2c2e; padding: 12px; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; font-family: monospace; }
+    li { background: #2c2c2e; padding: 10px; border-radius: 8px; margin-bottom: 6px; display: flex; justify-content: space-between; font-family: monospace; font-size: 0.9rem; }
   </style>
 </head>
 <body>
@@ -55,32 +57,32 @@
 
     <div class="card">
       <h3>① 端末通信連携</h3>
-      <p style="font-size:0.85rem; color:#aaa; margin-bottom:8px;">自端末ID: <strong id="my-id" style="color:#30d158">接続中...</strong></p>
-      <input type="text" id="target-id" placeholder="接続先(親機)のIDを入力">
-      <button class="btn-primary" onclick="connectToParent()">相手の端末と接続</button>
+      <p style="font-size:0.8rem; color:#aaa; margin-bottom:6px;">自端末ID: <strong id="my-id" style="color:#30d158">接続中...</strong></p>
+      <input type="text" id="target-id" placeholder="相手端末のIDを入力">
+      <button class="btn-primary" onclick="connectToParent()">接続する</button>
     </div>
 
     <div class="card">
-      <h3>② AI検知の役割</h3>
-      <div style="display:flex; gap:10px;">
+      <h3>② AI検知役割</h3>
+      <div style="display:flex; gap:8px;">
         <button id="role-start" class="btn-secondary" style="flex:1" onclick="setRole('START')">① スタート用</button>
         <button id="role-split" class="btn-secondary btn-active" style="flex:1" onclick="setRole('SPLIT')">② ゴール用</button>
       </div>
     </div>
 
-    <button class="btn-success" style="width:100%; padding:16px; font-size:1.1rem; margin-bottom:15px;" onclick="openCameraView()">📷 撮影モードを開始</button>
+    <button class="btn-success" style="width:100%; padding:14px; font-size:1rem; margin-bottom:12px;" onclick="openCameraView()">📷 撮影モードを開始</button>
 
     <div class="card">
-      <h3>⏱️ 記録ログ</h3>
+      <h3>⏱️ タイムログ</h3>
       <ul id="records"></ul>
     </div>
   </div>
 
   <div id="camera-view">
     <div class="camera-header">
-      <button class="btn-secondary" onclick="closeCameraView()">✕ 戻る</button>
-      <button class="btn-secondary" onclick="switchCamera()">🔄 カメラ切替</button>
-      <button class="btn-secondary" id="auto-btn" onclick="toggleAutoMode()">AI検知: ON</button>
+      <button class="icon-btn" onclick="closeCameraView()">✕</button>
+      <button class="icon-btn" onclick="switchCamera()">🔄</button>
+      <button class="btn-secondary" id="auto-btn" style="font-size:0.8rem;" onclick="toggleAutoMode()">AI: ON</button>
     </div>
 
     <div id="timer-overlay">00:00.000</div>
@@ -91,10 +93,11 @@
     </div>
 
     <div class="camera-controls">
-      <button class="btn-success" onclick="broadcastSignal('START')">手動スタート</button>
-      <button class="shutter-btn" id="record-btn" onclick="toggleRecording()"></button>
-      <button class="btn-danger" onclick="broadcastSignal('RESET')">リセット</button>
-    </div>
+      <button class="btn-secondary" style="font-size:0.8rem;" onclick="broadcastSignal('RESET')">リセット</button>
+      
+      <button class="shutter-btn" id="shutter" onclick="handleShutter()"></button>
+      
+      <div style="width: 60px;"></div> </div>
   </div>
 
   <script>
@@ -105,18 +108,17 @@
     let autoDetect = true;
     let hasPassed = false;
     let currentRole = 'SPLIT';
-    let facingMode = 'environment'; // 'environment'(外カメ) または 'user'(インカメ)
+    let facingMode = 'environment';
     
-    // 録画関係変数
+    // 録画制御
     let mediaRecorder = null;
     let recordedChunks = [];
-    let isRecording = false;
+    let isRunning = false;
 
     const videoElement = document.getElementById('input_video');
     const canvasElement = document.getElementById('output_canvas');
     const canvasCtx = canvasElement.getContext('2d');
 
-    // --- PeerJS（通信機能） ---
     peer.on('open', id => document.getElementById('my-id').innerText = id);
     peer.on('connection', conn => { connections.push(conn); setupDataHandler(conn); });
 
@@ -126,7 +128,7 @@
       const conn = peer.connect(targetId);
       connections.push(conn);
       setupDataHandler(conn);
-      alert("接続しました！");
+      alert("接続成功しました");
     }
 
     function setupDataHandler(conn) {
@@ -155,7 +157,7 @@
       hasPassed = false;
     }
 
-    // --- 画面切り替え ＆ カメラ設定 ---
+    // カメラ＆画面処理
     let cameraInstance = null;
 
     function openCameraView() {
@@ -165,6 +167,7 @@
 
     function closeCameraView() {
       document.getElementById('camera-view').style.display = 'none';
+      if (isRecording()) stopRecordingAndSave();
     }
 
     function switchCamera() {
@@ -178,33 +181,31 @@
       canvasElement.width = window.innerWidth;
       canvasElement.height = window.innerHeight;
 
+      // 軽量化設定でカクつきを大幅低減
       cameraInstance = new Camera(videoElement, {
         onFrame: async () => { await pose.send({ image: videoElement }); },
-        width: 1280,
-        height: 720,
+        width: 640,
+        height: 480,
         facingMode: facingMode
       });
       cameraInstance.start();
     }
 
-    // --- AI判定ロジック (MediaPipe Pose) ---
+    // 高速化・軽量化設定のMediaPipe Pose
     const pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-    pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5 });
+    pose.setOptions({ modelComplexity: 0, smoothLandmarks: true, minDetectionConfidence: 0.5 }); // Complexity 0で高速化
     pose.onResults(onResults);
 
     function onResults(results) {
       canvasCtx.save();
       canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      
-      // アスペクト比を維持して全画面描画
       canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-      // 中央判定線（赤線）
       const lineX = canvasElement.width / 2;
       canvasCtx.beginPath();
       canvasCtx.moveTo(lineX, 0);
       canvasCtx.lineTo(lineX, canvasElement.height);
-      canvasCtx.lineWidth = 4;
+      canvasCtx.lineWidth = 3;
       canvasCtx.strokeStyle = "rgba(255, 69, 58, 0.8)";
       canvasCtx.stroke();
 
@@ -214,16 +215,17 @@
         const noseY = nose.y * canvasElement.height;
 
         canvasCtx.beginPath();
-        canvasCtx.arc(noseX, noseY, 10, 0, 2 * Math.PI);
+        canvasCtx.arc(noseX, noseY, 8, 0, 2 * Math.PI);
         canvasCtx.fillStyle = "#30d158";
         canvasCtx.fill();
 
-        // 右から左への通過判定
+        // 右から左への判定
         if (autoDetect && !hasPassed) {
           if (noseX < lineX) {
             hasPassed = true;
             if (currentRole === 'START') {
               broadcastSignal('START');
+              startRecording();
             } else if (currentRole === 'SPLIT' && startTime > 0) {
               broadcastSignal('SPLIT');
             }
@@ -233,41 +235,55 @@
       canvasCtx.restore();
     }
 
-    // --- 動画録画機能 ---
-    function toggleRecording() {
-      const btn = document.getElementById('record-btn');
-      if (!isRecording) {
-        // 録画開始 (Canvasの映像をキャプチャ)
-        const stream = canvasElement.captureStream(30);
-        mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-        recordedChunks = [];
-
-        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
-        mediaRecorder.onstop = saveVideo;
-
-        mediaRecorder.start();
-        isRecording = true;
-        btn.classList.add('recording');
+    // 赤い丸ボタン（シャッター）操作
+    function handleShutter() {
+      const btn = document.getElementById('shutter');
+      
+      if (!isRunning) {
+        // スタート（計測・録画開始）
+        broadcastSignal('START');
+        startRecording();
+        btn.classList.add('active-rec');
+        isRunning = true;
       } else {
-        // 録画停止
-        mediaRecorder.stop();
-        isRecording = false;
-        btn.classList.remove('recording');
+        // ストップ（計測停止・録画自動保存）
+        stopRecordingAndSave();
+        btn.classList.remove('active-rec');
+        isRunning = false;
       }
     }
 
-    function saveVideo() {
-      const blob = new Blob(recordedChunks, { type: 'video/webm' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `timer_video_${Date.now()}.webm`;
-      a.click();
-      URL.revokeObjectURL(url);
-      alert("録画動画を端末に保存しました！");
+    // 録画機能
+    function startRecording() {
+      recordedChunks = [];
+      const stream = canvasElement.captureStream(30);
+      mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+      mediaRecorder.start();
     }
 
-    // --- タイマーUI処理 ---
+    function isRecording() {
+      return mediaRecorder && mediaRecorder.state === 'recording';
+    }
+
+    function stopRecordingAndSave() {
+      if (isRecording()) {
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `timer_record_${Date.now()}.webm`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        };
+        mediaRecorder.stop();
+      }
+    }
+
+    // タイマー UI
     function startTimerUI() {
       clearInterval(timerInterval);
       document.getElementById('records').innerHTML = '';
@@ -299,7 +315,7 @@
 
     function toggleAutoMode() {
       autoDetect = !autoDetect;
-      document.getElementById('auto-btn').innerText = `AI検知: ${autoDetect ? 'ON' : 'OFF'}`;
+      document.getElementById('auto-btn').innerText = `AI: ${autoDetect ? 'ON' : 'OFF'}`;
     }
   </script>
 </body>
