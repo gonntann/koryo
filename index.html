@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI自動検知 スプリットタイマー</title>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+  
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #121212; color: #fff; margin: 0; padding: 15px; }
+    .video-container { position: relative; display: inline-block; width: 100%; max-width: 400px; }
+    video, canvas { width: 100%; border-radius: 8px; background: #000; }
+    canvas { position: absolute; top: 0; left: 0; }
+    #timer { font-size: 3rem; font-weight: bold; font-family: monospace; color: #00ffcc; margin: 10px 0; }
+    button { padding: 10px 16px; font-size: 0.9rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; margin: 4px; }
+    .btn-start { background: #28a745; color: #fff; }
+    .btn-reset { background: #dc3545; color: #fff; }
+    .btn-mode { background: #17a2b8; color: #fff; }
+    .btn-active { border: 2px solid #00ffcc; font-weight: bold; }
+    input { padding: 8px; font-size: 0.9rem; border-radius: 4px; border: 1px solid #ccc; width: 45%; max-width: 160px; }
+    ul { list-style: none; padding: 0; max-width: 400px; margin: 15px auto; text-align: left; }
+    li { background: #222; padding: 10px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; }
+    .status { font-size: 0.85rem; color: #aaa; margin-bottom: 10px; }
+    .mode-box { background: #222; padding: 10px; border-radius: 8px; margin: 10px auto; max-width: 380px; }
+  </style>
+</head>
+<body>
+
+  <h1>🏃 AI通過検知ストップウォッチ</h1>
+
+  <div>
+    <span class="status">ID: <strong id="my-id" style="color:#00ffcc">接続中...</strong></span> | 
+    <input type="text" id="target-id" placeholder="親機ID">
+    <button onclick="connectToParent()" style="background:#6c757d; color:#fff;">接続</button>
+  </div>
+
+  <div class="mode-box">
+    <span style="font-size:0.85rem; color:#aaa; display:block; margin-bottom:5px;">AI検知の役割設定:</span>
+    <button id="role-start" class="btn-mode" onclick="setRole('START')">① スタート用 (通過で開始)</button>
+    <button id="role-split" class="btn-mode btn-active" onclick="setRole('SPLIT')">② ゴール用 (通過で記録)</button>
+  </div>
+
+  <div class="video-container">
+    <video id="input_video" playsinline style="display:none;"></video>
+    <canvas id="output_canvas" width="400" height="300"></canvas>
+  </div>
+
+  <div id="timer">00:00.000</div>
+
+  <div>
+    <button class="btn-start" onclick="broadcastSignal('START')">手動スタート</button>
+    <button class="btn-reset" onclick="broadcastSignal('RESET')">リセット</button>
+    <button class="btn-mode" id="auto-btn" onclick="toggleAutoMode()">AI検知: ON</button>
+  </div>
+
+  <h3>⏱️ 通過ログ</h3>
+  <ul id="records"></ul>
+
+  <script>
+    let peer = new Peer();
+    let connections = [];
+    let startTime = 0;
+    let timerInterval = null;
+    let autoDetect = true;
+    let hasPassed = false; // 重複検知防止
+    let currentRole = 'SPLIT'; // 'START' または 'SPLIT'
+
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+
+    // --- 1. PeerJS（通信） ---
+    peer.on('open', id => document.getElementById('my-id').innerText = id);
+    peer.on('connection', conn => { connections.push(conn); setupDataHandler(conn); });
+
+    function connectToParent() {
+      const targetId = document.getElementById('target-id').value;
+      if (!targetId) return alert("IDを入力してください");
+      const conn = peer.connect(targetId);
+      connections.push(conn);
+      setupDataHandler(conn);
+    }
+
+    function setupDataHandler(conn) {
+      conn.on('data', data => {
+        if (data.type === 'START') { startTime = data.timestamp; startTimerUI(); }
+        else if (data.type === 'SPLIT') { addSplitRecord(data.deviceName, data.timestamp - startTime); }
+        else if (data.type === 'RESET') { resetTimerUI(); }
+      });
+    }
+
+    function broadcastSignal(type) {
+      const timestamp = Date.now();
+      const payload = { type, timestamp, deviceName: `端末(${peer.id.slice(0, 4)})` };
+
+      if (type === 'START') { startTime = timestamp; startTimerUI(); }
+      else if (type === 'SPLIT') { if (startTime === 0) return; addSplitRecord(payload.deviceName, timestamp - startTime); }
+      else if (type === 'RESET') { resetTimerUI(); }
+
+      connections.forEach(conn => conn.send(payload));
+    }
+
+    // モード設定（スタート用かゴール用か）
+    function setRole(role) {
+      currentRole = role;
+      document.getElementById('role-start').classList.toggle('btn-active', role === 'START');
+      document.getElementById('role-split').classList.toggle('btn-active', role === 'SPLIT');
+      hasPassed = false;
+    }
+
+    // --- 2. MediaPipe Pose（人体検知AI） ---
+    const pose = new Pose({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    });
+
+    pose.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    pose.onResults(onResults);
+
+    function onResults(results) {
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      // 中央の判定ライン（赤線）
+      const lineX = canvasElement.width / 2;
+      canvasCtx.beginPath();
+      canvasCtx.moveTo(lineX, 0);
+      canvasCtx.lineTo(lineX, canvasElement.height);
+      canvasCtx.lineWidth = 3;
+      canvasCtx.strokeStyle = "red";
+      canvasCtx.stroke();
+
+      if (results.poseLandmarks) {
+        const nose = results.poseLandmarks[0];
+        const noseX = nose.x * canvasElement.width;
+        const noseY = nose.y * canvasElement.height;
+
+        // 鼻の位置描画
+        canvasCtx.beginPath();
+        canvasCtx.arc(noseX, noseY, 8, 0, 2 * Math.PI);
+        canvasCtx.fillStyle = "#00ffcc";
+        canvasCtx.fill();
+
+        // 判定ロジック（右から左へ通過した瞬間）
+        if (autoDetect && !hasPassed) {
+          if (noseX < lineX) {
+            hasPassed = true;
+            
+            if (currentRole === 'START') {
+              // スタート用設定の場合：タイマー開始信号を発火！
+              broadcastSignal('START');
+              canvasCtx.fillStyle = "#28a745";
+              canvasCtx.font = "30px sans-serif";
+              canvasCtx.fillText("START!", lineX - 50, 50);
+            } else if (currentRole === 'SPLIT' && startTime > 0) {
+              // ゴール用設定の場合：通過タイム計測を発火！
+              broadcastSignal('SPLIT');
+              canvasCtx.fillStyle = "yellow";
+              canvasCtx.font = "30px sans-serif";
+              canvasCtx.fillText("PASS!", lineX - 40, 50);
+            }
+          }
+        }
+      }
+      canvasCtx.restore();
+    }
+
+    const camera = new Camera(videoElement, {
+      onFrame: async () => { await pose.send({ image: videoElement }); },
+      width: 400,
+      height: 300
+    });
+    camera.start();
+
+    // --- 3. タイマー処理 ---
+    function startTimerUI() {
+      clearInterval(timerInterval);
+      document.getElementById('records').innerHTML = '';
+      timerInterval = setInterval(() => {
+        document.getElementById('timer').innerText = formatTime(Date.now() - startTime);
+      }, 10);
+    }
+
+    function resetTimerUI() {
+      clearInterval(timerInterval);
+      startTime = 0;
+      hasPassed = false;
+      document.getElementById('timer').innerText = "00:00.000";
+      document.getElementById('records').innerHTML = '';
+    }
+
+    function addSplitRecord(device, timeMs) {
+      const li = document.createElement('li');
+      li.innerHTML = `<span>${device}</span> <strong>${formatTime(timeMs)}</strong>`;
+      document.getElementById('records').prepend(li);
+    }
+
+    function formatTime(ms) {
+      const m = String(Math.floor(ms / 60000)).padStart(2, '0');
+      const s = String(Math.floor((ms % 60000) / 1000)).padStart(2, '0');
+      const msStr = String(ms % 1000).padStart(3, '0');
+      return `${m}:${s}.${msStr}`;
+    }
+
+    function toggleAutoMode() {
+      autoDetect = !autoDetect;
+      document.getElementById('auto-btn').innerText = `AI検知: ${autoDetect ? 'ON' : 'OFF'}`;
+    }
+  </script>
+</body>
+</html>
