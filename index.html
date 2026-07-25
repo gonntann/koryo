@@ -5,33 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>AIカメラ・タイマー Pro</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
-    html, body { width: 100%; height: 100%; background: #121212; color: #fff; font-family: -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { width: 100%; min-height: 100vh; background: #121212; color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; position: relative; }
     
     /* 1. 設定画面 */
-    #setup-view { width: 100%; height: 100%; padding: 15px; overflow-y: auto; text-align: center; background: #121212; display: block; }
-    h1 { font-size: 1.2rem; margin-bottom: 12px; }
-    .card { background: #1c1c1e; padding: 12px; border-radius: 12px; margin-bottom: 12px; text-align: left; }
-    .card h3 { font-size: 0.85rem; color: #8e8e93; margin-bottom: 8px; }
-    input { width: 100%; padding: 10px; font-size: 0.95rem; background: #2c2c2e; border: 1px solid #3a3a3c; color: #fff; border-radius: 8px; margin-bottom: 8px; }
+    #setup-view { width: 100%; min-height: 100vh; padding: 20px 15px; text-align: center; background: #121212; display: block; position: relative; z-index: 1; }
+    h1 { font-size: 1.3rem; margin-bottom: 16px; }
     
-    button { padding: 10px 14px; font-size: 0.9rem; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; }
+    .card { background: #1c1c1e; padding: 15px; border-radius: 12px; margin-bottom: 16px; text-align: left; }
+    .card h3 { font-size: 0.9rem; color: #8e8e93; margin-bottom: 10px; }
+    input { width: 100%; padding: 12px; font-size: 1rem; background: #2c2c2e; border: 1px solid #3a3a3c; color: #fff; border-radius: 8px; margin-bottom: 10px; display: block; }
+    
+    /* ボタン共通（タップ判定を強力にする設定） */
+    button {
+      padding: 12px 16px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      touch-action: manipulation;
+      position: relative;
+      z-index: 10;
+      display: inline-block;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    button:active { opacity: 0.7; transform: scale(0.98); }
+
     .btn-primary { background: #0a84ff; color: #fff; width: 100%; }
-    .btn-success { background: #30d158; color: #fff; }
+    .btn-success { background: #30d158; color: #fff; width: 100%; font-size: 1.1rem; padding: 16px; }
     .btn-secondary { background: #3a3a3c; color: #fff; }
     .btn-danger { background: #ff453a; color: #fff; }
-    .btn-active { border: 2px solid #30d158; background: #2c2c2e; }
+    .btn-active { border: 2px solid #30d158; background: #2c2c2e; color: #30d158; }
     
     /* 2. 撮影画面 */
-    #camera-view { display: none; width: 100vw; height: 100vh; background: #000; flex-direction: column; justify-content: space-between; align-items: center; }
+    #camera-view { display: none; width: 100vw; height: 100vh; position: fixed; top: 0; left: 0; background: #000; flex-direction: column; justify-content: space-between; align-items: center; z-index: 9999; }
     
-    .camera-header { width: 100%; height: 10vh; padding: 0 15px; background: #000; display: flex; justify-content: space-between; align-items: center; z-index: 10; }
-    .icon-btn { background: rgba(255,255,255,0.15); color: #fff; font-size: 1.1rem; width: 40px; height: 40px; border-radius: 50%; border: none; display: flex; justify-content: center; align-items: center; }
+    .camera-header { width: 100%; height: 60px; padding: 0 15px; background: #000; display: flex; justify-content: space-between; align-items: center; z-index: 10; }
+    .icon-btn { background: rgba(255,255,255,0.2); color: #fff; font-size: 1.2rem; width: 44px; height: 44px; border-radius: 50%; border: none; display: flex; justify-content: center; align-items: center; }
     
     .camera-container {
       position: relative;
-      height: 68vh;
-      width: calc(68vh * (9 / 16));
+      height: 65vh;
+      width: calc(65vh * (9 / 16));
       max-width: 100vw;
       background: #111;
       overflow: hidden;
@@ -46,7 +63,7 @@
     
     .camera-controls {
       width: 100%;
-      height: 22vh;
+      height: 120px;
       background: #000;
       display: flex;
       justify-content: center;
@@ -63,9 +80,7 @@
       border: 4px solid #fff;
       background: #ff453a;
       box-shadow: 0 0 10px rgba(255,255,255,0.2);
-      transition: all 0.1s;
     }
-    .shutter-btn:active { transform: scale(0.92); }
     .shutter-btn.active-rec { background: #ff0000; animation: pulse 1s infinite; border-radius: 16px; }
 
     @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
@@ -81,20 +96,20 @@
 
     <div class="card">
       <h3>① 端末通信連携</h3>
-      <p style="font-size:0.8rem; color:#aaa; margin-bottom:6px;">自端末ID: <strong id="my-id" style="color:#30d158">待機中...</strong></p>
+      <p style="font-size:0.85rem; color:#aaa; margin-bottom:8px;">自端末ID: <strong id="my-id" style="color:#30d158">待機中...</strong></p>
       <input type="text" id="target-id" placeholder="相手端末のIDを入力">
-      <button class="btn-primary" onclick="connectToParent()">接続する</button>
+      <button class="btn-primary" type="button" onclick="connectToParent()">接続する</button>
     </div>
 
     <div class="card">
       <h3>② AI検知役割</h3>
-      <div style="display:flex; gap:8px;">
-        <button id="role-start" class="btn-secondary" style="flex:1" onclick="setRole('START')">① スタート用</button>
-        <button id="role-split" class="btn-secondary btn-active" style="flex:1" onclick="setRole('SPLIT')">② ゴール用</button>
+      <div style="display:flex; gap:10px;">
+        <button id="role-start" class="btn-secondary" type="button" style="flex:1" onclick="setRole('START')">① スタート用</button>
+        <button id="role-split" class="btn-secondary btn-active" type="button" style="flex:1" onclick="setRole('SPLIT')">② ゴール用</button>
       </div>
     </div>
 
-    <button class="btn-success" style="width:100%; padding:14px; font-size:1rem; margin-bottom:12px;" onclick="startApp()">📷 撮影モードを開始</button>
+    <button class="btn-success" type="button" style="margin-bottom:16px;" onclick="startApp()">📷 撮影モードを開始</button>
 
     <div class="card">
       <h3>⏱️ タイムログ</h3>
@@ -104,9 +119,9 @@
 
   <div id="camera-view">
     <div class="camera-header">
-      <button class="icon-btn" onclick="closeCameraView()">✕</button>
-      <button class="icon-btn" onclick="switchCamera()">🔄</button>
-      <button class="btn-secondary" id="auto-btn" style="font-size:0.8rem;" onclick="toggleAutoMode()">AI: ON</button>
+      <button class="icon-btn" type="button" onclick="closeCameraView()">✕</button>
+      <button class="icon-btn" type="button" onclick="switchCamera()">🔄</button>
+      <button class="btn-secondary" id="auto-btn" type="button" style="font-size:0.8rem;" onclick="toggleAutoMode()">AI: ON</button>
     </div>
 
     <div class="camera-container" id="cam-box">
@@ -116,8 +131,8 @@
     </div>
 
     <div class="camera-controls">
-      <button class="shutter-btn" id="shutter" onclick="handleShutter()"></button>
-      <button class="btn-danger" style="padding:12px 18px; font-size:0.9rem;" onclick="broadcastSignal('RESET')">リセット</button>
+      <button class="shutter-btn" id="shutter" type="button" onclick="handleShutter()"></button>
+      <button class="btn-danger" type="button" style="padding:12px 18px; font-size:0.9rem;" onclick="broadcastSignal('RESET')">リセット</button>
     </div>
   </div>
 
@@ -145,25 +160,32 @@
     const canvasElement = document.getElementById('output_canvas');
     const canvasCtx = canvasElement.getContext('2d');
 
-    // 画面がロードされた後にPeerJSのみ初期化
-    window.addEventListener('load', () => {
-      try {
-        peer = new Peer();
-        peer.on('open', id => document.getElementById('my-id').innerText = id);
-        peer.on('connection', conn => { connections.push(conn); setupDataHandler(conn); });
-      } catch(e) {
-        console.error("PeerJS error:", e);
-      }
+    // 初期化処理
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => {
+        try {
+          if (typeof Peer !== 'undefined') {
+            peer = new Peer();
+            peer.on('open', id => {
+              const el = document.getElementById('my-id');
+              if (el) el.innerText = id;
+            });
+            peer.on('connection', conn => { connections.push(conn); setupDataHandler(conn); });
+          }
+        } catch(e) {
+          console.warn("PeerJS Initialization Warning:", e);
+        }
+      }, 500);
     });
 
     function connectToParent() {
-      if(!peer) return;
+      if(!peer) return alert("通信の初期化中です。少し待ってから再度お試しください。");
       const targetId = document.getElementById('target-id').value;
-      if (!targetId) return alert("IDを入力してください");
+      if (!targetId) return alert("相手端末のIDを入力してください");
       const conn = peer.connect(targetId);
       connections.push(conn);
       setupDataHandler(conn);
-      alert("接続成功しました");
+      alert("接続しました！");
     }
 
     function setupDataHandler(conn) {
@@ -176,7 +198,7 @@
 
     function broadcastSignal(type) {
       const timestamp = Date.now();
-      const myIdStr = peer && peer.id ? peer.id.slice(0, 4) : '自端末';
+      const myIdStr = (peer && peer.id) ? peer.id.slice(0, 4) : '自端末';
       const payload = { type, timestamp, deviceName: `端末(${myIdStr})` };
 
       if (type === 'START') { startTime = timestamp; startTimerUI(); }
@@ -193,28 +215,19 @@
       hasPassed = false;
     }
 
-    // ボタンを押したタイミングで初めてカメラとAIを初期化して起動
+    // 「撮影モードを開始」ボタン処理
     async function startApp() {
-      // 1. AI Poseの初期化
-      if(!pose) {
-        pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-        pose.setOptions({ modelComplexity: 0, smoothLandmarks: false, minDetectionConfidence: 0.5 });
-        pose.onResults(onResults);
-      }
-
-      // 2. カメラ許可の取得
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        stream.getTracks().forEach(track => track.stop()); // 許可確認用ストリームの停止
-      } catch(err) {
-        alert("カメラの利用が許可されていません。ブラウザ設定を確認してください。");
-        return;
-      }
-
-      // 3. 画面切替とカメラ起動
       document.getElementById('setup-view').style.display = 'none';
       document.getElementById('camera-view').style.display = 'flex';
-      
+
+      if (typeof Pose !== 'undefined' && !pose) {
+        try {
+          pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+          pose.setOptions({ modelComplexity: 0, smoothLandmarks: false, minDetectionConfidence: 0.5 });
+          pose.onResults(onResults);
+        } catch(e) {}
+      }
+
       setTimeout(() => { initCamera(); }, 200);
     }
 
@@ -237,13 +250,23 @@
       canvasElement.width = box.clientWidth || 300;
       canvasElement.height = box.clientHeight || 400;
 
-      cameraInstance = new Camera(videoElement, {
-        onFrame: async () => { if(pose) await pose.send({ image: videoElement }); },
-        width: 480,
-        height: 360,
-        facingMode: facingMode
-      });
-      cameraInstance.start();
+      if (typeof Camera !== 'undefined') {
+        cameraInstance = new Camera(videoElement, {
+          onFrame: async () => { 
+            if(pose) {
+              try { await pose.send({ image: videoElement }); } catch(e){}
+            } else {
+              canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+            }
+          },
+          width: 480,
+          height: 360,
+          facingMode: facingMode
+        });
+        cameraInstance.start().catch(err => {
+          alert("カメラ起動エラー: " + err.message);
+        });
+      }
     }
 
     function onResults(results) {
@@ -307,9 +330,7 @@
         mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
         mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
         mediaRecorder.start();
-      } catch(e) {
-        console.warn("録画エラー:", e);
-      }
+      } catch(e) {}
     }
 
     function isRecording() {
@@ -360,7 +381,14 @@
     function formatTime(ms) {
       const m = String(Math.floor(ms / 60000)).padStart(2, '0');
       const s = String(Math.floor((ms % 60000) / 1000)).padStart(2, '0');
-      const msStr = String(ms % 1000).padStart(3
-                                               </script>
+      const msStr = String(ms % 1000).padStart(3, '0');
+      return `${m}:${s}.${msStr}`;
+    }
+
+    function toggleAutoMode() {
+      autoDetect = !autoDetect;
+      document.getElementById('auto-btn').innerText = `AI: ${autoDetect ? 'ON' : 'OFF'}`;
+    }
+  </script>
 </body>
 </html>
