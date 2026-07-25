@@ -3,17 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>AIカメラ・スプリットタイマー Pro</title>
-  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-  
+  <title>AIカメラ・タイマー Pro</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
-    html, body { width: 100%; height: 100%; background: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; }
+    html, body { width: 100%; height: 100%; background: #121212; color: #fff; font-family: -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; }
     
     /* 1. 設定画面 */
-    #setup-view { width: 100%; height: 100%; padding: 15px; overflow-y: auto; text-align: center; background: #121212; }
+    #setup-view { width: 100%; height: 100%; padding: 15px; overflow-y: auto; text-align: center; background: #121212; display: block; }
     h1 { font-size: 1.2rem; margin-bottom: 12px; }
     .card { background: #1c1c1e; padding: 12px; border-radius: 12px; margin-bottom: 12px; text-align: left; }
     .card h3 { font-size: 0.85rem; color: #8e8e93; margin-bottom: 8px; }
@@ -26,26 +22,342 @@
     .btn-danger { background: #ff453a; color: #fff; }
     .btn-active { border: 2px solid #30d158; background: #2c2c2e; }
     
-    /* 2. 撮影モード View */
-    #camera-view { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #000; z-index: 9999; flex-direction: column; align-items: center; justify-content: space-between; }
+    /* 2. 撮影画面 */
+    #camera-view { display: none; width: 100vw; height: 100vh; background: #000; flex-direction: column; justify-content: space-between; align-items: center; }
     
-    /* ヘッダー */
-    .camera-header { width: 100%; padding: 10px 15px; background: rgba(0,0,0,0.8); z-index: 10; display: flex; justify-content: space-between; align-items: center; }
-    .icon-btn { background: rgba(255,255,255,0.15); color: #fff; font-size: 1.1rem; padding: 6px 12px; border-radius: 50%; border: none; }
+    .camera-header { width: 100%; height: 10vh; padding: 0 15px; background: #000; display: flex; justify-content: space-between; align-items: center; z-index: 10; }
+    .icon-btn { background: rgba(255,255,255,0.15); color: #fff; font-size: 1.1rem; width: 40px; height: 40px; border-radius: 50%; border: none; display: flex; justify-content: center; align-items: center; }
     
-    /* 撮影エリア：スマホ画面の約7割の高さ ＆ 縦16:横9比率 */
     .camera-container {
       position: relative;
       height: 68vh;
-      aspect-ratio: 9 / 16;
+      width: calc(68vh * (9 / 16));
+      max-width: 100vw;
       background: #111;
       overflow: hidden;
+      border-radius: 12px;
       display: flex;
       justify-content: center;
       align-items: center;
-      border-radius: 12px;
-      margin: auto 0;
     }
     video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
     
-    #timer-overlay { position: absolute; top: 15px; width: 100%; text-align: center; font-size: 2.4rem; font-family: monospace; font-weight: bold; color: #30d158; text-shadow: 0 2px 8px rgba(0,0,0,0.9
+    #timer-overlay { position: absolute; top: 15px; width: 100%; text-align: center; font-size: 2.2rem; font-family: monospace; font-weight: bold; color: #30d158; text-shadow: 0 2px 8px rgba(0,0,0,0.9); z-index: 5; pointer-events: none; }
+    
+    .camera-controls {
+      width: 100%;
+      height: 22vh;
+      background: #000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 30px;
+      padding-bottom: 10px;
+      z-index: 10;
+    }
+    
+    .shutter-btn {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      border: 4px solid #fff;
+      background: #ff453a;
+      box-shadow: 0 0 10px rgba(255,255,255,0.2);
+      transition: all 0.1s;
+    }
+    .shutter-btn:active { transform: scale(0.92); }
+    .shutter-btn.active-rec { background: #ff0000; animation: pulse 1s infinite; border-radius: 16px; }
+
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
+
+    ul { list-style: none; padding: 0; }
+    li { background: #2c2c2e; padding: 10px; border-radius: 8px; margin-bottom: 6px; display: flex; justify-content: space-between; font-family: monospace; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+
+  <div id="setup-view">
+    <h1>🏃 AIカメラ・タイマー Pro</h1>
+
+    <div class="card">
+      <h3>① 端末通信連携</h3>
+      <p style="font-size:0.8rem; color:#aaa; margin-bottom:6px;">自端末ID: <strong id="my-id" style="color:#30d158">待機中...</strong></p>
+      <input type="text" id="target-id" placeholder="相手端末のIDを入力">
+      <button class="btn-primary" onclick="connectToParent()">接続する</button>
+    </div>
+
+    <div class="card">
+      <h3>② AI検知役割</h3>
+      <div style="display:flex; gap:8px;">
+        <button id="role-start" class="btn-secondary" style="flex:1" onclick="setRole('START')">① スタート用</button>
+        <button id="role-split" class="btn-secondary btn-active" style="flex:1" onclick="setRole('SPLIT')">② ゴール用</button>
+      </div>
+    </div>
+
+    <button class="btn-success" style="width:100%; padding:14px; font-size:1rem; margin-bottom:12px;" onclick="startApp()">📷 撮影モードを開始</button>
+
+    <div class="card">
+      <h3>⏱️ タイムログ</h3>
+      <ul id="records"></ul>
+    </div>
+  </div>
+
+  <div id="camera-view">
+    <div class="camera-header">
+      <button class="icon-btn" onclick="closeCameraView()">✕</button>
+      <button class="icon-btn" onclick="switchCamera()">🔄</button>
+      <button class="btn-secondary" id="auto-btn" style="font-size:0.8rem;" onclick="toggleAutoMode()">AI: ON</button>
+    </div>
+
+    <div class="camera-container" id="cam-box">
+      <div id="timer-overlay">00:00.000</div>
+      <video id="input_video" playsinline muted style="display:none;"></video>
+      <canvas id="output_canvas"></canvas>
+    </div>
+
+    <div class="camera-controls">
+      <button class="shutter-btn" id="shutter" onclick="handleShutter()"></button>
+      <button class="btn-danger" style="padding:12px 18px; font-size:0.9rem;" onclick="broadcastSignal('RESET')">リセット</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+
+  <script>
+    let peer = null;
+    let connections = [];
+    let startTime = 0;
+    let timerInterval = null;
+    let autoDetect = true;
+    let hasPassed = false;
+    let currentRole = 'SPLIT';
+    let facingMode = 'environment';
+    
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let isRunning = false;
+    let cameraInstance = null;
+    let pose = null;
+
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('output_canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+
+    // 画面がロードされた後にPeerJSのみ初期化
+    window.addEventListener('load', () => {
+      try {
+        peer = new Peer();
+        peer.on('open', id => document.getElementById('my-id').innerText = id);
+        peer.on('connection', conn => { connections.push(conn); setupDataHandler(conn); });
+      } catch(e) {
+        console.error("PeerJS error:", e);
+      }
+    });
+
+    function connectToParent() {
+      if(!peer) return;
+      const targetId = document.getElementById('target-id').value;
+      if (!targetId) return alert("IDを入力してください");
+      const conn = peer.connect(targetId);
+      connections.push(conn);
+      setupDataHandler(conn);
+      alert("接続成功しました");
+    }
+
+    function setupDataHandler(conn) {
+      conn.on('data', data => {
+        if (data.type === 'START') { startTime = data.timestamp; startTimerUI(); }
+        else if (data.type === 'SPLIT') { addSplitRecord(data.deviceName, data.timestamp - startTime); }
+        else if (data.type === 'RESET') { resetTimerUI(); }
+      });
+    }
+
+    function broadcastSignal(type) {
+      const timestamp = Date.now();
+      const myIdStr = peer && peer.id ? peer.id.slice(0, 4) : '自端末';
+      const payload = { type, timestamp, deviceName: `端末(${myIdStr})` };
+
+      if (type === 'START') { startTime = timestamp; startTimerUI(); }
+      else if (type === 'SPLIT') { if (startTime === 0) return; addSplitRecord(payload.deviceName, timestamp - startTime); }
+      else if (type === 'RESET') { resetTimerUI(); }
+
+      connections.forEach(conn => conn.send(payload));
+    }
+
+    function setRole(role) {
+      currentRole = role;
+      document.getElementById('role-start').classList.toggle('btn-active', role === 'START');
+      document.getElementById('role-split').classList.toggle('btn-active', role === 'SPLIT');
+      hasPassed = false;
+    }
+
+    // ボタンを押したタイミングで初めてカメラとAIを初期化して起動
+    async function startApp() {
+      // 1. AI Poseの初期化
+      if(!pose) {
+        pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+        pose.setOptions({ modelComplexity: 0, smoothLandmarks: false, minDetectionConfidence: 0.5 });
+        pose.onResults(onResults);
+      }
+
+      // 2. カメラ許可の取得
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach(track => track.stop()); // 許可確認用ストリームの停止
+      } catch(err) {
+        alert("カメラの利用が許可されていません。ブラウザ設定を確認してください。");
+        return;
+      }
+
+      // 3. 画面切替とカメラ起動
+      document.getElementById('setup-view').style.display = 'none';
+      document.getElementById('camera-view').style.display = 'flex';
+      
+      setTimeout(() => { initCamera(); }, 200);
+    }
+
+    function closeCameraView() {
+      if (cameraInstance) cameraInstance.stop();
+      if (isRecording()) stopRecordingAndSave();
+      document.getElementById('camera-view').style.display = 'none';
+      document.getElementById('setup-view').style.display = 'block';
+    }
+
+    function switchCamera() {
+      facingMode = (facingMode === 'environment') ? 'user' : 'environment';
+      initCamera();
+    }
+
+    function initCamera() {
+      if (cameraInstance) cameraInstance.stop();
+
+      const box = document.getElementById('cam-box');
+      canvasElement.width = box.clientWidth || 300;
+      canvasElement.height = box.clientHeight || 400;
+
+      cameraInstance = new Camera(videoElement, {
+        onFrame: async () => { if(pose) await pose.send({ image: videoElement }); },
+        width: 480,
+        height: 360,
+        facingMode: facingMode
+      });
+      cameraInstance.start();
+    }
+
+    function onResults(results) {
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      const lineX = canvasElement.width / 2;
+      canvasCtx.beginPath();
+      canvasCtx.moveTo(lineX, 0);
+      canvasCtx.lineTo(lineX, canvasElement.height);
+      canvasCtx.lineWidth = 3;
+      canvasCtx.strokeStyle = "rgba(255, 69, 58, 0.8)";
+      canvasCtx.stroke();
+
+      if (results.poseLandmarks) {
+        const nose = results.poseLandmarks[0];
+        const noseX = nose.x * canvasElement.width;
+        const noseY = nose.y * canvasElement.height;
+
+        canvasCtx.beginPath();
+        canvasCtx.arc(noseX, noseY, 8, 0, 2 * Math.PI);
+        canvasCtx.fillStyle = "#30d158";
+        canvasCtx.fill();
+
+        if (autoDetect && !hasPassed) {
+          if (noseX < lineX) {
+            hasPassed = true;
+            if (currentRole === 'START') {
+              broadcastSignal('START');
+              startRecording();
+              document.getElementById('shutter').classList.add('active-rec');
+              isRunning = true;
+            } else if (currentRole === 'SPLIT' && startTime > 0) {
+              broadcastSignal('SPLIT');
+            }
+          }
+        }
+      }
+      canvasCtx.restore();
+    }
+
+    function handleShutter() {
+      const btn = document.getElementById('shutter');
+      if (!isRunning) {
+        broadcastSignal('START');
+        startRecording();
+        btn.classList.add('active-rec');
+        isRunning = true;
+      } else {
+        stopRecordingAndSave();
+        btn.classList.remove('active-rec');
+        isRunning = false;
+      }
+    }
+
+    function startRecording() {
+      recordedChunks = [];
+      try {
+        const stream = canvasElement.captureStream(25);
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+        mediaRecorder.start();
+      } catch(e) {
+        console.warn("録画エラー:", e);
+      }
+    }
+
+    function isRecording() {
+      return mediaRecorder && mediaRecorder.state === 'recording';
+    }
+
+    function stopRecordingAndSave() {
+      if (isRecording()) {
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `runner_video_${Date.now()}.webm`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        };
+        mediaRecorder.stop();
+      }
+    }
+
+    function startTimerUI() {
+      clearInterval(timerInterval);
+      document.getElementById('records').innerHTML = '';
+      timerInterval = setInterval(() => {
+        document.getElementById('timer-overlay').innerText = formatTime(Date.now() - startTime);
+      }, 10);
+    }
+
+    function resetTimerUI() {
+      clearInterval(timerInterval);
+      startTime = 0;
+      hasPassed = false;
+      isRunning = false;
+      document.getElementById('shutter').classList.remove('active-rec');
+      document.getElementById('timer-overlay').innerText = "00:00.000";
+      document.getElementById('records').innerHTML = '';
+    }
+
+    function addSplitRecord(device, timeMs) {
+      const li = document.createElement('li');
+      li.innerHTML = `<span>${device}</span> <strong>${formatTime(timeMs)}</strong>`;
+      document.getElementById('records').prepend(li);
+    }
+
+    function formatTime(ms) {
+      const m = String(Math.floor(ms / 60000)).padStart(2, '0');
+      const s = String(Math.floor((ms % 60000) / 1000)).padStart(2, '0');
+      const msStr = String(ms % 1000).padStart(3
